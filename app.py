@@ -1,110 +1,19 @@
-import json
 import os
 
 import cv2
 import gradio as gr
 import numpy as np
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
 from PIL import Image
-from torchvision import models, transforms
+
+from model_core import MEAN, STD, friendly, load_model, make_gradcam, predict
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-NUM_CLASSES = 38
-MEAN = np.array([0.485, 0.456, 0.406])
-STD = np.array([0.229, 0.224, 0.225])
-
-device = torch.device("cpu")
-
-model = models.efficientnet_b0(weights=None)
-model.classifier[1] = nn.Linear(model.classifier[1].in_features, NUM_CLASSES)
-state = torch.load(
-    os.path.join(BASE_DIR, "crop_disease_model.pth"),
-    map_location="cpu",
-)
-model.load_state_dict(state)
-model.to(device).eval()
-
-with open(os.path.join(BASE_DIR, "class_names.json"), "r") as f:
-    class_names = json.load(f)
-
-target_layer = model.features[-1]
-
-val_transform = transforms.Compose(
-    [
-        transforms.Resize((224, 224)),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-    ]
-)
-
-
-def friendly(label):
-    crop, disease = label.split("___", 1)
-    if disease == "healthy":
-        return crop.replace("_", " "), "Healthy"
-    return crop.replace("_", " "), disease.replace("_", " ")
-
-
-def predict(image, top_k=3):
-    image_tensor = val_transform(image).unsqueeze(0).to(device)
-
-    with torch.no_grad():
-        logits = model(image_tensor)
-        probabilities = torch.softmax(logits, dim=1)
-
-    confidences, indices = torch.topk(probabilities, k=min(top_k, NUM_CLASSES), dim=1)
-
-    results = []
-    for confidence, index in zip(confidences[0], indices[0]):
-        results.append(
-            {
-                "class": class_names[index.item()],
-                "confidence": confidence.item(),
-                "class_index": index.item(),
-            }
-        )
-    return results
-
-
-def make_gradcam(image_pil):
-    activations = {}
-    gradients = {}
-
-    def forward_hook(module, input, output):
-        activations["value"] = output
-
-    def backward_hook(module, grad_input, grad_output):
-        gradients["value"] = grad_output[0]
-
-    handle_f = target_layer.register_forward_hook(forward_hook)
-    handle_b = target_layer.register_full_backward_hook(backward_hook)
-
-    input_tensor = val_transform(image_pil).unsqueeze(0).to(device)
-    output = model(input_tensor)
-    top_index = output.argmax(dim=1).item()
-
-    model.zero_grad()
-    output[0, top_index].backward()
-
-    handle_f.remove()
-    handle_b.remove()
-
-    act = activations["value"][0].detach().cpu()
-    grad = gradients["value"][0].detach().cpu()
-
-    weights = grad.mean(dim=(1, 2), keepdim=True)
-    cam = F.relu((weights * act).sum(dim=0)).numpy()
-
-    cam = cam - cam.min()
-    cam = cam / (cam.max() + 1e-6)
-    return cam, top_index
+model = load_model()
 
 
 def gradcam_gallery(image_pil, top_index):
-    cam, _ = make_gradcam(image_pil)
+    cam, _ = make_gradcam(model, image_pil)
 
     rgb = val_transform(image_pil).cpu().numpy().transpose(1, 2, 0)
     rgb = np.clip(rgb * STD + MEAN, 0, 1)
@@ -140,8 +49,8 @@ def analyze(image):
     try:
         if hasattr(image, "convert"):
             image = image.convert("RGB")
-        top_results = predict(image)
-        cam, top_index = make_gradcam(image)
+        top_results = predict(model, image)
+        cam, top_index = make_gradcam(model, image)
         gallery = gradcam_gallery(image, top_index)
     except Exception as e:
         return f"<div class='err'>Couldn't analyse this image: {e}</div>", None

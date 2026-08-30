@@ -1,0 +1,6 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "name": "crop-disease-detector",
+  "framework": null,
+  "outputDirectory": "."
+}

@@ -1,0 +1,16 @@
+[theme]
+base = "light"
+primaryColor = "#31431f"
+backgroundColor = "#f4efe0"
+secondaryBackgroundColor = "#fffdf6"
+textColor = "#2b2b26"
+linkColor = "#4c6b2d"
+borderColor = "#ded5ba"
+greenColor = "#2e7d32"
+redColor = "#b3261e"
+font = "Nunito Sans:https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;600;700&display=swap"
+headingFont = "Lora:https://fonts.googleapis.com/css2?family=Lora:wght@600;700&display=swap"
+codeFont = "JetBrains Mono:https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap"
+baseRadius = "10px"
+buttonRadius = "full"
+showWidgetBorder = true
