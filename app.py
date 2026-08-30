@@ -5,7 +5,7 @@ import gradio as gr
 import numpy as np
 from PIL import Image
 
-from model_core import MEAN, STD, friendly, load_model, make_gradcam, predict
+from model_core import MEAN, STD, friendly, load_model, make_gradcam, predict, val_transform
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
