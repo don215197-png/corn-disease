@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Crop Disease Detector — AI Leaf Diagnosis</title>
+<meta name="description" content="A PyTorch EfficientNet-B0 model that identifies crop and plant leaf diseases from a photo. 99.67% test accuracy on PlantVillage." />
+<meta property="og:title" content="Crop Disease Detector" />
+<meta property="og:description" content="Upload a leaf photo — an EfficientNet-B0 identifies the disease with Grad-CAM explainability. 99.67% test accuracy." />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 30C8 26 4 18 6 8c7-2 14 3 14 10 0 5-4 9-4 9z' fill='%2331431f'/%3E%3C/svg%3E" />
+<style>
+  :root {
+    --paper: #f4efe0;
+    --card: #fffdf6;
+    --leaf: #31431f;
+    --leaf-mid: #6d8f3c;
+    --leaf-pale: #eef2dd;
+    --ink: #2b2b26;
+    --muted: #76705e;
+    --line: #ded5ba;
+    --disease: #b3261e;
+    --healthy: #2e7d32;
+    --shadow: 0 10px 30px rgba(49, 67, 31, .12);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: 'Trebuchet MS', system-ui, sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    line-height: 1.6;
+  }
+  h1, h2, h3 { font-family: Georgia, 'Times New Roman', serif; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+
+  header.nav {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(244, 239, 224, .9);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--line);
+  }
+  .nav-inner { display: flex; align-items: center; justify-content: space-between; height: 64px; }
+  .logo { display: flex; align-items: center; gap: 10px; font-weight: 700; color: var(--leaf); text-decoration: none; }
+  .logo svg { width: 26px; height: 26px; }
+  .nav-links { display: flex; gap: 24px; align-items: center; }
+  .nav-links a { color: var(--leaf); text-decoration: none; font-size: 15px; font-weight: 600; }
+  .nav-links a:hover { text-decoration: underline; }
+  .nav-cta {
+    background: var(--leaf); color: #f5f1e3 !important; padding: 8px 16px;
+    border-radius: 999px; font-size: 14px !important;
+  }
+  .nav-cta:hover { background: #3f5730; text-decoration: none !important; }
+
+  .hero { padding: 72px 0 56px; }
+  .hero-grid { display: grid; grid-template-columns: 1.1fr .9fr; gap: 44px; align-items: center; }
+  .hero h1 { font-size: 46px; line-height: 1.12; color: var(--leaf); margin-bottom: 16px; }
+  .hero h1 em { font-style: normal; color: var(--leaf-mid); }
+  .hero p.sub { color: #55503f; font-size: 18px; max-width: 520px; }
+  .hero-btns { display: flex; gap: 14px; margin-top: 28px; flex-wrap: wrap; }
+  .btn {
+    display: inline-block; padding: 12px 22px; border-radius: 999px;
+    font-weight: 700; text-decoration: none; font-size: 15px; transition: transform .15s, filter .15s;
+  }
+  .btn-primary { background: var(--leaf); color: #f5f1e3; }
+  .btn-primary:hover { filter: brightness(1.12); transform: translateY(-2px); }
+  .btn-ghost { border: 2px solid var(--leaf-mid); color: var(--leaf-mid); }
+  .btn-ghost:hover { background: var(--leaf-pale); transform: translateY(-2px); }
+
+  .specimen {
+    position: relative; background: var(--card); border: 1px solid var(--line);
+    border-radius: 16px; box-shadow: var(--shadow); padding: 22px;
+  }
+  .specimen .bar {
+    height: 7px; border-radius: 999px; display: inline-block; vertical-align: middle;
+    background: linear-gradient(90deg, #6d8f3c, #31431f);
+  }
+  .robot-leaf {
+    width: 100%; aspect-ratio: 5 / 4; border-radius: 12px; margin: 4px 0 14px;
+    background:
+      radial-gradient(circle at 30% 30%, rgba(109,143,60,.35) 0, transparent 55%),
+      radial-gradient(circle at 72% 68%, rgba(179,38,30,.30) 0, transparent 50%),
+      repeating-linear-gradient(0deg, #5a7a34 0 2px, #4f6d2e 2px 4px);
+    border: 3px solid #3a4d26;
+    position: relative; overflow: hidden;
+  }
+  .specimen .stamp {
+    position: absolute; right: 14px; top: 30px; transform: rotate(-8deg);
+    border: 3px solid var(--disease); color: var(--disease);
+    background: rgba(255,253,246,.82); padding: 5px 16px; border-radius: 6px;
+    font-family: Georgia, serif; font-weight: 700; letter-spacing: 2px; font-size: 17px;
+  }
+  .pred-row { display: flex; align-items: center; gap: 10px; margin: 9px 0; font-size: 13px; }
+  .pred-name { width: 42%; color: var(--ink); }
+  .track { flex: 1; height: 13px; background: #ede5c9; border-radius: 7px; overflow: hidden; }
+  .fill { height: 100%; background: linear-gradient(90deg, #6d8f3c, #31431f); border-radius: 7px; }
+  .conf { width: 44px; text-align: right; font-weight: 700; color: var(--leaf); }
+
+  .metrics { background: var(--leaf); color: #e9e4cd; padding: 22px 0; }
+  .metrics-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; text-align: center; }
+  .metric b { font-size: 28px; display: block; font-family: Georgia, serif; color: #fff; }
+  .metric span { font-size: 13px; color: #c9c4aa; }
+
+  section { padding: 64px 0; }
+  .eyebrow { color: var(--leaf-mid); font-weight: 700; letter-spacing: 2px; text-transform: uppercase; font-size: 12px; }
+  h2.sec { font-size: 32px; color: var(--leaf); margin: 6px 0 12px; }
+  .lede { color: #625c4a; max-width: 640px; margin-bottom: 28px; }
+
+  .demo-frame {
+    background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+    box-shadow: var(--shadow); padding: 14px; 
+  }
+  .demo-frame iframe { width: 100%; height: 720px; border: 0; border-radius: 10px; background: #fff; }
+  .demo-note { color: var(--muted); font-size: 13px; margin-top: 12px; text-align: center; }
+  .demo-pending {
+    border: 2px dashed var(--leaf-mid); border-radius: 10px; padding: 60px 20px; text-align: center; color: var(--muted);
+  }
+  .demo-pending code { background: var(--leaf-pale); padding: 2px 8px; border-radius: 6px; color: var(--leaf); }
+
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  .step { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 24px; box-shadow: 0 4px 14px rgba(49,67,31,.07); }
+  .step .n {
+    width: 34px; height: 34px; border-radius: 50%; background: var(--leaf-mid); color: #fff;
+    display: flex; align-items: center; justify-content: center; font-weight: 700; font-family: Georgia, serif; margin-bottom: 12px;
+  }
+  .step h3 { color: var(--leaf); margin-bottom: 6px; }
+  .step p { font-size: 14px; color: #5d5745; }
+
+  .cards2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 26px; box-shadow: 0 4px 14px rgba(49,67,31,.07); }
+  .card h3 { color: var(--leaf); margin: 4px 0 10px; }
+  .card ul { list-style: none; }
+  .card li { padding: 5px 0 5px 22px; position: relative; font-size: 14px; color: #57513f; }
+  .card li::before { content: ""; position: absolute; left: 0; top: 12px; width: 8px; height: 8px; background: var(--leaf-mid); border-radius: 2px; transform: rotate(45deg); }
+
+  .gradcam-band { background: var(--leaf); border-radius: 16px; padding: 34px; color: #e9e4cd; margin-top: 26px; }
+  .gradcam-band h3 { color: #fff; font-size: 22px; margin-bottom: 10px; }
+  .gradcam-band p { font-size: 15px; color: #c9c4aa; max-width: 720px; }
+  .heat-preview { margin-top: 20px; display: flex; gap: 14px; flex-wrap: wrap; }
+  .heat { flex: 1 1 200px; height: 130px; border-radius: 10px; background: linear-gradient(135deg, #203018, #5a7a34 55%, #d88c1f 82%, #e0441f); border: 2px solid #1f2c15; }
+
+  .chips { display: flex; gap: 10px; flex-wrap: wrap; }
+  .chip { background: var(--leaf-pale); color: var(--leaf); border: 1px solid #c8d6a8; padding: 8px 16px; border-radius: 999px; font-size: 14px; font-weight: 600; }
+
+  footer { border-top: 1px solid var(--line); padding: 34px 0; text-align: center; color: var(--muted); font-size: 14px; }
+  footer a { color: var(--leaf-mid); font-weight: 600; text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+
+  .reveal { opacity: 0; transform: translateY(18px); transition: opacity .6s ease, transform .6s ease; }
+  .reveal.in { opacity: 1; transform: none; }
+
+  @media (max-width: 860px) {
+    .hero-grid, .cards2 { grid-template-columns: 1fr; }
+    .steps { grid-template-columns: 1fr; }
+    .metrics-grid { grid-template-columns: repeat(2, 1fr); gap: 18px; }
+    .hero h1 { font-size: 34px; }
+    .nav-links a:not(.nav-cta) { display: none; }
+    .demo-frame iframe { height: 560px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap nav-inner">
+    <a class="logo" href="#top">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 30C8 26 4 18 6 8c7-2 14 3 14 10 0 5-4 9-4 9z" fill="#31431f"/><path d="M12 4c0 5-3 10-7 13 2 1 4 1 6 1-1-5 0-10 1-14z" fill="#6d8f3c"/></svg>
+      Crop Disease Detector
+    </a>
+    <nav class="nav-links">
+      <a href="#demo">Live demo</a>
+      <a href="#how">How it works</a>
+      <a href="#model">Model</a>
+      <a href="#model">Results</a>
+      <a class="nav-cta" href="#demo">Try it free</a>
+    </nav>
+  </div>
+</header>
+
+<section id="top" class="hero">
+  <div class="wrap">
+    <div class="hero-grid">
+      <div>
+        <div class="eyebrow">PyTorch &middot; Computer Vision</div>
+        <h1>Upload a leaf.<br />AI names the <em>disease</em>.</h1>
+        <p class="sub">A fine-tuned <b>EfficientNet-B0</b> classifies 38 crop diseases &mdash; and highlights exactly which region of the leaf convinced it, with Grad-CAM.</p>
+        <div class="hero-btns">
+          <a class="btn btn-primary" href="#demo">Test the live model</a>
+          <a class="btn btn-ghost" href="https://github.com/don215197-png/corn-disease" target="_blank" rel="noopener">View on GitHub</a>
+        </div>
+      </div>
+      <div class="specimen reveal">
+        <div class="robot-leaf"><span class="stamp">DISEASE</span></div>
+        <div class="pred-row"><span class="pred-name">Apple &bull; Apple scab</span><span class="track"><span class="fill" style="width:99.7%"></span></span><span class="conf">99.7%</span></div>
+        <div class="pred-row"><span class="pred-name">Cherry &bull; Powdery mildew</span><span class="track"><span class="fill" style="width:.2%"></span></span><span class="conf">0.2%</span></div>
+        <div class="pred-row"><span class="pred-name">Apple &bull; Cedar rust</span><span class="track"><span class="fill" style="width:.1%"></span></span><span class="conf">0.1%</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="metrics">
+  <div class="wrap metrics-grid">
+    <div class="metric"><b>99.67%</b><span>test accuracy</span></div>
+    <div class="metric"><b>99.67%</b><span>weighted F1</span></div>
+    <div class="metric"><b>100%</b><span>top-5 accuracy</span></div>
+    <div class="metric"><b>14</b><span>crop species</span></div>
+  </div>
+</div>
+
+<section id="demo">
+  <div class="wrap">
+    <div class="eyebrow">Try it</div>
+    <h2 class="sec">The live demo</h2>
+    <p class="lede">Drag a crop leaf photo into the upload box &mdash; the model returns a diagnosis with confidence bars and a Grad-CAM heatmap. Runs entirely in the browser session on a free CPU.</p>
+    <div class="demo-frame reveal">
+      <div id="demo-slot"></div>
+    </div>
+    <p class="demo-note">Demo hosted on Hugging Face Spaces (free tier). First load can take a few seconds.</p>
+  </div>
+</section>
+
+<section id="how">
+  <div class="wrap">
+    <div class="eyebrow">How it works</div>
+    <h2 class="sec">From photo to diagnosis</h2>
+    <div class="steps">
+      <div class="step reveal"><div class="n">1</div><h3>Upload</h3><p>A leaf photo is resized to 224&times;224 and normalised to ImageNet statistics.</p></div>
+      <div class="step reveal"><div class="n">2</div><h3>Classify</h3><p>EfficientNet-B0 scores all 38 classes; softmax probabilities rank the top 3.</p></div>
+      <div class="step reveal"><div class="n">3</div><h3>Explain</h3><p>Grad-CAM back-propagates from the winning class to heat-map the leaf region behind the decision.</p></div>
+    </div>
+
+    <div class="gradcam-band reveal">
+      <h3>Grad-CAM explainability</h3>
+      <p>The demo returns three views side by side: the original leaf, a whitened heatmap, and a jet-colour overlay &mdash; so every prediction is auditable, not a black box.</p>
+      <div class="heat-preview">
+        <div class="heat"></div>
+        <div class="heat" style="filter: grayscale(1) brightness(1.1);"></div>
+        <div class="heat" style="opacity:.75;"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="model">
+  <div class="wrap">
+    <div class="eyebrow">Under the hood</div>
+    <h2 class="sec">Model &amp; training</h2>
+    <div class="cards2">
+      <div class="card reveal">
+        <h3>Architecture</h3>
+        <ul>
+          <li>EfficientNet-B0, ImageNet-pretrained, classifier head swapped for a 38-way layer.</li>
+          <li>AdamW (lr 1e-3, weight decay 1e-4) + ReduceLROnPlateau.</li>
+          <li>10 epochs, fp16 mixed precision, best-checkpoint selection.</li>
+          <li>Augmentation: flips, rotation, colour jitter.</li>
+        </ul>
+      </div>
+      <div class="card reveal">
+        <h3>Data &amp; integrity</h3>
+        <ul>
+          <li>PlantVillage: 54,304 leaf photos, 38 classes, 14 crops.</li>
+          <li>Held-out official test split + 10% stratified validation.</li>
+          <li>Leakage audit: no leaf id spans both training and test.</li>
+          <li>Confusion matrix + classification report in the notebook.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="stack">
+  <div class="wrap">
+    <div class="eyebrow">Built with</div>
+    <h2 class="sec">Tech stack</h2>
+    <div class="chips">
+      <span class="chip">PyTorch</span>
+      <span class="chip">TorchVision</span>
+      <span class="chip">Gradio</span>
+      <span class="chip">NumPy</span>
+      <span class="chip">OpenCV</span>
+      <span class="chip">Hugging Face Spaces</span>
+      <span class="chip">Vercel</span>
+    </div>
+  </div>
+</section>
+
+<footer>
+  Crop Disease Detector &middot; a portfolio project &middot;
+  <a href="https://github.com/don215197-png/corn-disease" target="_blank" rel="noopener">source</a>
+</footer>
+
+<script>
+  // Point this at your Hugging Face Space once it exists, e.g.
+  // "https://your-username-crop-disease-detector.hf.space"
+  var DEMO_URL = "https://YOUR-USERNAME-crop-disease-detector.hf.space";
+
+  var slot = document.getElementById("demo-slot");
+  if (DEMO_URL.indexOf("YOUR-USERNAME") === -1) {
+    var iframe = document.createElement("iframe");
+    iframe.src = DEMO_URL;
+    iframe.setAttribute("loading", "lazy");
+    iframe.setAttribute("title", "Crop Disease Detector live demo");
+    slot.appendChild(iframe);
+  } else {
+    slot.innerHTML =
+      '<div class="demo-pending">' +
+      'The demo Space has not been published yet — create it on ' +
+      '<b>Hugging Face Spaces</b> (Gradio SDK, CPU basic, Python 3.11), deploy the files from the ' +
+      '<a href="https://github.com/don215197-png/corn-disease" target="_blank" rel="noopener">GitHub repo</a>, ' +
+      'then set <code>DEMO_URL</code> in <code>index.html</code>.<br/>' +
+      'Until then, run it locally: <code>pip install -r requirements.txt && python app.py</code>' +
+      '</div>';
+  }
+
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) {
+      if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
+    });
+  }, { threshold: 0.15 });
+  document.querySelectorAll(".reveal").forEach(function (el) { io.observe(el); });
+</script>
+</body>
+</html>
