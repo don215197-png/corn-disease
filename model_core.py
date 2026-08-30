@@ -41,7 +41,7 @@ def friendly(label):
 def load_model():
     model = models.efficientnet_b0(weights=None)
     model.classifier[1] = nn.Linear(model.classifier[1].in_features, NUM_CLASSES)
-    state = torch.load(MODEL_PATH, map_location="cpu")
+    state = torch.load(MODEL_PATH, map_location="cpu", weights_only=True)
     model.load_state_dict(state)
     model.to(DEVICE).eval()
     return model
